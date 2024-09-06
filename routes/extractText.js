@@ -13,7 +13,7 @@ async function analyzeDocument(input, filetype) {
     throw new Error("Missing required parameters: input and filetype");
   }
   
-  const allowedFiletypes = ["Resume", "Invoice", "Card"];
+  const allowedFiletypes = ["Resume", "Invoice", "Business Card"];
   if (!allowedFiletypes.includes(filetype)) {
     throw new Error(`Invalid filetype. Allowed values: ${allowedFiletypes.join(", ")}`);
   }
@@ -29,17 +29,17 @@ async function analyzeDocument(input, filetype) {
   let cleanFunction;
   if(filetype === "Resume"){
     modelId = process.env.CVXTRACT_V1_MODEL_ID;
-    cleanFunction = cleanDocumentData;
+    // cleanFunction = cleanDocumentData;
   } else if(filetype === "Invoice"){
     modelId = process.env.PREBUILT_INVOICE_MODEL_ID; 
-    cleanFunction = cleanInvoiceDocumentData;
-  } else if(filetype === "Card"){
+    // cleanFunction = cleanDocumentData;
+  } else if(filetype === "Business Card"){
     modelId = process.env.PREBUILT_BUSINESSCARD_MODEL_ID;
-    cleanFunction = cleanDocumentData; 
+    // cleanFunction = cleanDocumentData; 
   }
   
   try {
-    const poller = await client.beginAnalyzeDocument(modelId, fileURL);
+    const poller = await client.beginAnalyzeDocument(modelId, fileURL); 
     const {
       documents: [document],
     } = await poller.pollUntilDone();
@@ -47,8 +47,8 @@ async function analyzeDocument(input, filetype) {
       throw new Error("Expected at least one document in the result.");
     }
 
-    const cleanedData = cleanFunction(document);
-
+    const cleanedData = cleanDocumentData(document);
+ 
     return cleanedData; 
 
   } catch (error) {
