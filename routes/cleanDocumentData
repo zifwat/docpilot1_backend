@@ -1,53 +1,101 @@
-      function cleanDocumentData(document) {
-    const cleanedData = {}; 
 
-    // Recursive function to clean and extract content, value, and bounding regions with polygon x,y coordinates
-    function cleanFields(fields, parentKey = '', boundingRegions = []) {
-        for (const [key, field] of Object.entries(fields)) {
-            if (field && typeof field === 'object') {
-                //If the field has value or boundingRegions, store them
-                if (field.value) {
-                    if (typeof field.value == 'object') {
-                        cleanedData[`${parentKey}${key}_value`] = Object.values(field.value).join(' ');
+function cleanDocumentData(document) {
+    const cleanedData = {};
+
+    function cleanFields(fields, parentKey = '') {
+        for (const [fieldName, field] of Object.entries(fields)) {
+            let currentKey = `${parentKey}${fieldName}`;
+
+            // Handle fields that are arrays
+            if (field.kind === 'array' && Array.isArray(field.values)) {
+                field.values.forEach((element, index) => {
+                    // Check if the element is an object or has properties
+                    if (element.properties && typeof element.properties === 'object') {
+                        // Recursively clean nested properties
+                        cleanFields(element.properties, `${currentKey}_${index}_`);
                     } else {
-                    cleanedData[`${parentKey}${key}_value`] = field.value || null;
+                        // Handle primitive values in the array
+                        handleValue(element.value, `${currentKey}_${index}`);
+
+                        // Handle bounding regions if present for each element
+                        if (element.boundingRegions) {
+                            cleanedData[`${currentKey}_${index}_boundingRegions`] = element.boundingRegions.map(region => ({
+                                pageNumber: region.pageNumber || null,
+                                polygon: region.polygon ? region.polygon.map(point => ({
+                                    x: point.x,
+                                    y: point.y
+                                })) : null
+                            }));
+                        }
+                    }
+                });
+            } 
+            // Handle fields that are objects (nested structure)
+            else if (field.kind === 'object' || field.properties) {
+                if (field.properties) {
+                    // Recursively clean nested properties
+                    cleanFields(field.properties, `${currentKey}_`);
+                } else {
+                    // Handle if it's a primitive object
+                    handleValue(field.value, currentKey);
                 }
             }
-                if (field.boundingRegions) {
-                    field.boundingRegions.forEach((region, index) => {
-                        cleanedData[`${parentKey}${key}_boundingRegion_${index}_pageNumber`] = region.pageNumber || null;
-                        if (region.polygon) {
-                            // Store polygon points as x and y coordinates
-                            cleanedData[`${parentKey}${key}_boundingRegion_${index}_polygon`] = region.polygon.map(point => ({
-                                x: point.x,
-                                y: point.y
-                            }));
-                        } else {
-                            cleanedData[`${parentKey}${key}_boundingRegion_${index}_polygon`] = null;
-                        }
-                    });
-                }
-                // Recursively clean nested objects
-                cleanFields(field, `${parentKey}${key}_`, field.boundingRegions || boundingRegions);
+            // Handle primitive values directly
+            else if (field.value) {
+                handleValue(field.value, currentKey);
+            }
+
+            // Handle bounding regions if present for each field
+            if (field.boundingRegions) {
+                cleanedData[`${currentKey}_boundingRegions`] = field.boundingRegions.map(region => ({
+                    pageNumber: region.pageNumber || null,
+                    polygon: region.polygon ? region.polygon.map(point => ({
+                        x: point.x,
+                        y: point.y
+                    })) : null
+                }));
             }
         }
     }
-    
-    // Clean and extract fields
+
+    // Function to handle values and flatten nested objects or arrays within them
+    function handleValue(value, parentKey) {
+        if (Array.isArray(value)) {
+            value.forEach((element, index) => {
+                handleValue(element, `${parentKey}_${index}`);
+            });
+        } else if (typeof value === 'object' && value !== null) {
+            flattenNestedObject(value, parentKey);
+        } else {
+            cleanedData[`${parentKey}_value`] = value;
+        }
+    }
+
+    // Function to flatten nested object structures
+    function flattenNestedObject(nestedObject, parentKey) {
+        for (const [nestedKey, nestedValue] of Object.entries(nestedObject)) {
+            if (Array.isArray(nestedValue)) {
+                // If it's an array, handle each element
+                nestedValue.forEach((element, index) => {
+                    handleValue(element, `${parentKey}_${nestedKey}_${index}`);
+                });
+            } else if (typeof nestedValue === 'object' && nestedValue !== null) {
+                // If it's a nested object, call this function recursively
+                flattenNestedObject(nestedValue, `${parentKey}_${nestedKey}`);
+            } else {
+                // Handle normal values
+                cleanedData[`${parentKey}_${nestedKey}_value`] = nestedValue;
+            }
+        }
+    }
+
+    // Start cleaning process from the top-level fields
     if (document.fields) {
         cleanFields(document.fields);
-    }      
-    
-
-    // Preserve essential properties (if necessary)
-    // if (document.confidence !== undefined) {
-    //     cleanedData.confidence = document.confidence;
-    // }
-    // if (document.docType) {
-    //     cleanedData.docType = document.docType;
-    // }
+    }
 
     return cleanedData;
 }
+
 
 module.exports = cleanDocumentData;
